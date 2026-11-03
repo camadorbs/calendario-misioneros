@@ -1,0 +1,851 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Calendario de Comida con Misioneros Barrio Horizon West</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --ink: #1c2733;
+    --paper: #f6f8fa;
+    --card: #ffffff;
+    --line: #c9d2db;
+    --teal: #0e5a63;
+    --teal-dark: #093f46;
+    --open-bg: #e2f3e7;
+    --open-line: #6fb787;
+    --open-ink: #14633a;
+    --taken-bg: #e8eaed;
+    --taken-line: #aab2bc;
+    --taken-ink: #4b5563;
+    --gold: #b9791a;
+    --danger: #a32020;
+    --danger-bg: #fdecec;
+  }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0;
+    font-family: 'Atkinson Hyperlegible', 'Segoe UI', system-ui, -apple-system, Arial, sans-serif;
+    font-size: 22px;
+    line-height: 1.45;
+    color: var(--ink);
+    background: var(--paper);
+  }
+  .wrap { max-width: 760px; margin: 0 auto; padding: 20px 16px 64px; }
+  h1 { font-size: 2rem; line-height: 1.2; margin: 8px 0 8px; }
+  h2 { font-size: 1.5rem; line-height: 1.25; margin: 28px 0 10px; }
+  p { margin: 0 0 14px; }
+  .lead { font-size: 1.15rem; color: #384555; }
+  :focus-visible { outline: 4px solid var(--gold); outline-offset: 3px; }
+  h1:focus { outline: none; }
+
+  .btn {
+    display: block; width: 100%; min-height: 64px;
+    font: inherit; font-weight: 700;
+    padding: 14px 20px; margin: 12px 0;
+    border-radius: 14px; border: 3px solid var(--teal);
+    background: var(--teal); color: #fff; cursor: pointer;
+    text-align: center;
+  }
+  .btn:hover { background: var(--teal-dark); border-color: var(--teal-dark); }
+  .btn.secondary { background: #fff; color: var(--teal); }
+  .btn.secondary:hover { background: #e9f2f3; }
+  .btn.danger { background: var(--danger); border-color: var(--danger); }
+  .btn.danger:hover { background: #7f1717; border-color: #7f1717; }
+  .btn:disabled { opacity: .55; cursor: not-allowed; }
+  .btn.small { min-height: 52px; padding: 8px 14px; margin: 8px 0; }
+  .row { display: flex; flex-wrap: wrap; gap: 12px; }
+  .row .btn { margin: 12px 0; flex: 1 1 220px; }
+  [hidden] { display: none !important; }
+
+  fieldset.choices { border: 0; padding: 0; margin: 20px 0 0; min-width: 0; }
+  fieldset.choices legend { font-weight: 700; padding: 0; margin-bottom: 6px; }
+  .choice {
+    display: flex; align-items: center; gap: 14px; margin: 10px 0; padding: 14px 16px;
+    border: 3px solid #7b8896; border-radius: 12px; background: #fff; cursor: pointer; font-weight: 400;
+  }
+  .choice span { font-weight: 700; line-height: 1.3; }
+  .choice input[type=radio] {
+    width: 30px; height: 30px; min-height: 0; padding: 0; margin: 0; flex: none; accent-color: var(--teal);
+  }
+  .choice:has(input:checked) { border-color: var(--teal); background: #e9f2f3; }
+  .choice:focus-within { outline: 4px solid var(--gold); outline-offset: 3px; }
+
+  .notice {
+    background: #fff7e0; border: 3px solid var(--gold); color: #4a3000;
+    border-radius: 12px; padding: 14px 16px; margin: 16px 0;
+  }
+  .notice p { font-weight: 700; margin-bottom: 6px; }
+  ul.dates { margin: 6px 0 12px; padding-left: 26px; }
+  ul.dates li { margin: 2px 0; }
+
+  .back { margin-top: 0; }
+
+  .comp {
+    display: block; width: 100%; text-align: left; font: inherit;
+    background: var(--card); border: 3px solid var(--teal); border-radius: 16px;
+    padding: 22px 20px; margin: 16px 0; cursor: pointer; color: var(--ink);
+  }
+  .comp:hover { background: #eef6f7; }
+  .comp-names { display: block; font-size: 1.5rem; font-weight: 700; line-height: 1.25; }
+  .comp-hint { display: block; margin-top: 6px; color: var(--teal); font-weight: 700; }
+
+  .card {
+    background: var(--card); border: 2px solid var(--line);
+    border-radius: 14px; padding: 18px; margin: 14px 0;
+  }
+  .card .when { font-weight: 700; font-size: 1.2rem; }
+  .meta { color: #384555; }
+
+  .month-nav { display: grid; grid-template-columns: 1fr 1.6fr 1fr; gap: 8px; align-items: center; margin: 14px 0; }
+  .month-nav .btn { margin: 0; min-height: 60px; padding: 8px; }
+  .month-label { text-align: center; font-size: 1.35rem; font-weight: 700; line-height: 1.2; }
+
+  .dow, .grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px; }
+  .dow div { text-align: center; font-weight: 700; font-size: .8rem; color: #384555; padding-bottom: 4px; }
+  .day {
+    font: inherit; display: flex; flex-direction: column; align-items: center; justify-content: center;
+    min-height: 62px; padding: 4px 0; border-radius: 10px; border: 2px solid; cursor: pointer; color: inherit;
+  }
+  .day .num { font-size: 1.25rem; font-weight: 700; line-height: 1.1; }
+  .day .tag { font-size: .68rem; font-weight: 700; line-height: 1.2; margin-top: 2px; }
+  .day.open { background: var(--open-bg); border-color: var(--open-line); color: var(--open-ink); }
+  .day.open:hover { background: #cdeed6; }
+  .day.taken { background: var(--taken-bg); border-color: var(--taken-line); color: var(--taken-ink); }
+  .day.taken .tag::before { content: "\2715  "; }
+  .day.open .tag::before { content: "\2713  "; }
+  .day.past { background: transparent; border: 2px dashed #d5dbe1; color: #8995a3; cursor: default; }
+  .day.today { box-shadow: 0 0 0 4px var(--gold); }
+  .blank { min-height: 62px; }
+  @media (min-width: 600px) {
+    .day { min-height: 84px; }
+    .day .num { font-size: 1.6rem; }
+    .day .tag { font-size: .85rem; }
+    .blank { min-height: 84px; }
+    .dow div { font-size: 1rem; }
+  }
+  .legend { display: flex; flex-wrap: wrap; gap: 8px 18px; margin: 16px 0 4px; font-size: .95rem; }
+  .legend span { display: inline-flex; align-items: center; gap: 8px; }
+  .swatch { width: 22px; height: 22px; border-radius: 6px; border: 2px solid; display: inline-block; }
+  .swatch.open { background: var(--open-bg); border-color: var(--open-line); }
+  .swatch.taken { background: var(--taken-bg); border-color: var(--taken-line); }
+  .swatch.today { background: #fff; border-color: var(--gold); box-shadow: 0 0 0 3px var(--gold); }
+
+  label { display: block; font-weight: 700; margin: 20px 0 6px; }
+  .hint { display: block; font-weight: 400; color: #4a5766; font-size: .95rem; }
+  input, select, textarea {
+    width: 100%; font: inherit; color: var(--ink); background: #fff;
+    border: 3px solid #7b8896; border-radius: 12px; padding: 14px; min-height: 60px;
+  }
+  textarea { min-height: 120px; resize: vertical; }
+  input:focus, select:focus, textarea:focus { border-color: var(--teal); }
+
+  .error {
+    background: var(--danger-bg); border: 3px solid var(--danger); color: #6e1010;
+    border-radius: 12px; padding: 14px 16px; margin: 16px 0; font-weight: 700;
+  }
+  .error:empty { display: none; }
+  .ok {
+    background: var(--open-bg); border: 3px solid var(--open-line); color: var(--open-ink);
+    border-radius: 12px; padding: 14px 16px; margin: 16px 0; font-weight: 700;
+  }
+  .confirm { background: var(--danger-bg); border: 3px solid var(--danger); border-radius: 12px; padding: 14px; margin-top: 10px; }
+  .confirm p { font-weight: 700; margin-bottom: 6px; }
+  .big-check {
+    width: 76px; height: 76px; border-radius: 50%; background: var(--open-bg);
+    border: 4px solid var(--open-line); color: var(--open-ink);
+    display: flex; align-items: center; justify-content: center; font-size: 2.4rem; font-weight: 700; margin: 8px 0 12px;
+  }
+  .link { background: none; border: none; font: inherit; color: var(--teal); text-decoration: underline; cursor: pointer; padding: 12px 8px; min-height: 48px; }
+  .foot { text-align: center; margin-top: 36px; }
+  .empty { padding: 18px; border: 2px dashed var(--line); border-radius: 14px; color: #384555; }
+  .demo-banner {
+    background: #fff7e0; border: 2px solid var(--gold); color: #5c3b00;
+    border-radius: 12px; padding: 10px 14px; margin: 0 0 14px; font-size: .9rem;
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .btn, .comp, .day { transition: background-color .12s ease; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div id="app" aria-live="polite"></div>
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  /* =====================================================================
+     SETTINGS YOU CAN CHANGE
+     ===================================================================== */
+  var CONFIG = {
+    // 'local'    = saves in THIS browser only (good for testing the look and feel).
+    // 'bluestep' = saves to your BlueStep database so everyone sees the same live calendar.
+    backend: 'local',
+
+    // Leaders page PIN. NOTE: a PIN typed in the page is only a light lock. Before going live,
+    // have BlueStep enforce who may edit names / delete other people's sign-ups (see BlueStepStore).
+    leaderPin: '1234',
+
+    // How often the calendar quietly refreshes so people see new sign-ups (seconds).
+    refreshSeconds: 30,
+
+    // Earliest and latest times shown in the time list (24-hour, whole hours).
+    firstHour: 10,
+    lastHour: 21,
+
+    // Language used for dates (month and day names).
+    locale: 'es-US',
+
+    bluestep: {
+      // TODO: replace with your real BlueStep endpoint (see BlueStepStore below).
+      baseUrl: '/api/missionary-meals'
+    }
+  };
+
+  var COMPS = ['A', 'B'];
+  var DEFAULT_SETTINGS = {
+    A: { names: 'Compañerismo 1 (nombres sin definir)' },
+    B: { names: 'Compañerismo 2 (nombres sin definir)' }
+  };
+
+  /* =====================================================================
+     DATA LAYER  (the only part that talks to storage)
+     Data shapes:
+       settings: { A: {names: "Élder Smith y Élder Jones"}, B: {names: "..."} }
+       signup:   { id, comp: "A"|"B", date: "YYYY-MM-DD", time: "18:00",
+                   name, phone, notes, created }
+     Rule: only ONE signup per comp + date. The server should enforce this
+     and answer HTTP 409 if the day is already taken.
+     ===================================================================== */
+  function clone(o) { return JSON.parse(JSON.stringify(o)); }
+
+  var LocalStore = {
+    key: 'comida-misioneros-v1',
+    _mem: null,
+    _read: function () {
+      try {
+        var raw = window.localStorage.getItem(this.key);
+        if (raw) { return JSON.parse(raw); }
+      } catch (e) {}
+      if (!this._mem) { this._mem = { settings: clone(DEFAULT_SETTINGS), signups: [] }; }
+      return this._mem;
+    },
+    _write: function (d) {
+      this._mem = d;
+      try { window.localStorage.setItem(this.key, JSON.stringify(d)); } catch (e) {}
+    },
+    load: function () { return Promise.resolve(clone(this._read())); },
+    add: function (s) {
+      var d = this._read();
+      var taken = d.signups.some(function (x) { return x.comp === s.comp && x.date === s.date; });
+      if (taken) { return Promise.reject(new Error('TAKEN')); }
+      s.id = 's' + Date.now() + Math.random().toString(36).slice(2, 7);
+      s.created = new Date().toISOString();
+      d.signups.push(s);
+      this._write(d);
+      return Promise.resolve(s);
+    },
+    remove: function (id) {
+      var d = this._read();
+      d.signups = d.signups.filter(function (x) { return x.id !== id; });
+      this._write(d);
+      return Promise.resolve();
+    },
+    saveSettings: function (st) {
+      var d = this._read();
+      d.settings = st;
+      this._write(d);
+      return Promise.resolve();
+    }
+  };
+
+  // Connect to BlueStep by making these 4 calls work (any URLs are fine, just change them here):
+  //   GET    {baseUrl}                 -> { settings, signups }
+  //   POST   {baseUrl}/signups         -> creates a signup; answer 409 if comp+date already exists
+  //   DELETE {baseUrl}/signups/{id}    -> removes a signup
+  //   PUT    {baseUrl}/settings        -> saves missionary names
+  var BlueStepStore = {
+    _req: function (method, path, body) {
+      return fetch(CONFIG.bluestep.baseUrl + path, {
+        method: method,
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: body ? JSON.stringify(body) : undefined
+      }).then(function (res) {
+        if (res.status === 409) { throw new Error('TAKEN'); }
+        if (!res.ok) { throw new Error('HTTP ' + res.status); }
+        return res.status === 204 ? null : res.json();
+      });
+    },
+    load: function () { return this._req('GET', ''); },
+    add: function (s) { return this._req('POST', '/signups', s); },
+    remove: function (id) { return this._req('DELETE', '/signups/' + encodeURIComponent(id)); },
+    saveSettings: function (st) { return this._req('PUT', '/settings', st); }
+  };
+
+  var Store = CONFIG.backend === 'bluestep' ? BlueStepStore : LocalStore;
+
+  /* =====================================================================
+     HELPERS
+     ===================================================================== */
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+  function cap(s) { return s ? s.charAt(0).toUpperCase() + s.slice(1) : s; }
+  function pad(n) { return n < 10 ? '0' + n : '' + n; }
+  function keyOf(y, m, d) { return y + '-' + pad(m + 1) + '-' + pad(d); }
+  function todayKey() {
+    var t = new Date();
+    return keyOf(t.getFullYear(), t.getMonth(), t.getDate());
+  }
+  function parseKey(k) {
+    var p = k.split('-');
+    return new Date(+p[0], +p[1] - 1, +p[2]);
+  }
+  function longDate(k) {
+    return cap(parseKey(k).toLocaleDateString(CONFIG.locale, { weekday: 'long', month: 'long', day: 'numeric' }));
+  }
+  function timeLabel(t) {
+    var p = t.split(':');
+    var h = +p[0];
+    var ap = h >= 12 ? 'p. m.' : 'a. m.';
+    var h12 = h % 12 === 0 ? 12 : h % 12;
+    return h12 + ':' + p[1] + ' ' + ap;
+  }
+  function digits(s) { return String(s || '').replace(/\D/g, ''); }
+  // Lowercase, no accents, single spaces: "María  Pérez" and "maria perez" match.
+  function norm(s) {
+    return String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, ' ').trim();
+  }
+  // Every word typed must appear in the signup's name.
+  function nameMatches(fullName, query) {
+    var n = norm(fullName);
+    var words = norm(query).split(' ').filter(Boolean);
+    return words.length > 0 && words.every(function (w) { return n.indexOf(w) !== -1; });
+  }
+
+  // The three kinds of invitation.
+  var TYPES = {
+    home: {
+      form: 'Los misioneros comen en mi casa',
+      card: 'Comida en la casa del miembro',
+      said: function (n, t) { return n + ' invita a los misioneros a comer en su casa a las ' + t + '.'; }
+    },
+    deliver: {
+      form: 'Yo envío la comida a la casa de los misioneros',
+      card: 'Comida enviada a la casa de los misioneros',
+      said: function (n, t) { return n + ' enviará la comida a la casa de los misioneros a las ' + t + '.'; }
+    },
+    pickup: {
+      form: 'Los misioneros pasan a recoger la comida',
+      card: 'Los misioneros pasan a recoger la comida',
+      said: function (n, t) { return n + ' tendrá la comida lista para que los misioneros la recojan a las ' + t + '.'; }
+    }
+  };
+  function typeCard(s) { return TYPES[s.type] ? TYPES[s.type].card : ''; }
+  function takenSentence(s) {
+    var t = timeLabel(s.time);
+    return TYPES[s.type] ? TYPES[s.type].said(s.name, t) : s.name + ' les dará de comer a las ' + t + '.';
+  }
+  function typeChoices() {
+    return '<fieldset class="choices"><legend>Tipo de invitación</legend>' +
+      Object.keys(TYPES).map(function (k) {
+        return '<label class="choice"><input type="radio" name="type" value="' + k + '"><span>' + esc(TYPES[k].form) + '</span></label>';
+      }).join('') + '</fieldset>';
+  }
+  function weekOptions() {
+    return [4, 6, 8, 12].map(function (n) { return '<option value="' + n + '">' + n + ' semanas</option>'; }).join('');
+  }
+  function timeOptions() {
+    var out = [];
+    for (var h = CONFIG.firstHour; h <= CONFIG.lastHour; h++) {
+      out.push(pad(h) + ':00');
+      if (h < CONFIG.lastHour) { out.push(pad(h) + ':30'); }
+    }
+    return out;
+  }
+
+  /* =====================================================================
+     STATE
+     ===================================================================== */
+  var t0 = new Date();
+  var state = {
+    view: 'home',
+    comp: null,
+    y: t0.getFullYear(),
+    m: t0.getMonth(),
+    date: null,
+    data: { settings: clone(DEFAULT_SETTINGS), signups: [] },
+    nameQuery: '',
+    searched: false,
+    confirmId: null,
+    leader: false,
+    msg: '',
+    last: null
+  };
+  var app = document.getElementById('app');
+
+  function namesOf(c) {
+    var s = state.data.settings && state.data.settings[c];
+    return (s && s.names) ? s.names : DEFAULT_SETTINGS[c].names;
+  }
+  function signupFor(c, k) {
+    return state.data.signups.filter(function (s) { return s.comp === c && s.date === k; })[0] || null;
+  }
+  function upcoming(list) {
+    var t = todayKey();
+    return list.filter(function (s) { return s.date >= t; })
+      .sort(function (a, b) { return a.date < b.date ? -1 : a.date > b.date ? 1 : 0; });
+  }
+
+  /* =====================================================================
+     VIEWS
+     ===================================================================== */
+  function demoBanner() {
+    if (CONFIG.backend === 'local') {
+      return '<div class="demo-banner">Modo de prueba: las inscripciones se guardan solo en este dispositivo. ' +
+             'Conecte BlueStep para compartir el calendario con todos.</div>';
+    }
+    return '';
+  }
+
+  function viewHome() {
+    var cards = COMPS.map(function (c) {
+      return '<button class="comp" data-action="openComp" data-comp="' + c + '">' +
+        '<span class="comp-names">' + esc(namesOf(c)) + '</span>' +
+        '<span class="comp-hint">Ver los días libres</span></button>';
+    }).join('');
+    return demoBanner() +
+      '<h1 id="title" tabindex="-1">Calendario de Comida con Misioneros Barrio Horizon West</h1>' +
+      '<p class="lead">Seleccione el nombre de los misioneros a quienes desea invitar a comer.</p>' +
+      cards +
+      '<button class="btn secondary" data-action="mine">Mis Invitaciones</button>' +
+      '<div class="foot"><button class="link" data-action="leaders">Solo para líderes</button></div>';
+  }
+
+  function viewCalendar() {
+    var c = state.comp;
+    var first = new Date(state.y, state.m, 1);
+    var count = new Date(state.y, state.m + 1, 0).getDate();
+    var today = todayKey();
+    var now = new Date();
+    var atCurrent = (state.y < now.getFullYear()) ||
+      (state.y === now.getFullYear() && state.m <= now.getMonth());
+
+    var cells = '';
+    for (var i = 0; i < first.getDay(); i++) { cells += '<div class="blank"></div>'; }
+    for (var d = 1; d <= count; d++) {
+      var k = keyOf(state.y, state.m, d);
+      var s = signupFor(c, k);
+      var past = k < today;
+      var cls = 'day' + (k === today ? ' today' : '');
+      var label = parseKey(k).toLocaleDateString(CONFIG.locale, { weekday: 'long', month: 'long', day: 'numeric' });
+      if (past) {
+        cells += '<button class="' + cls + ' past" disabled aria-label="' + esc(label) + ', pasado">' +
+          '<span class="num">' + d + '</span><span class="tag">&nbsp;</span></button>';
+      } else if (s) {
+        cells += '<button class="' + cls + ' taken" data-action="pickDay" data-date="' + k + '" aria-label="' +
+          esc(label) + ', ocupado">' + '<span class="num">' + d + '</span><span class="tag">Ocupado</span></button>';
+      } else {
+        cells += '<button class="' + cls + ' open" data-action="pickDay" data-date="' + k + '" aria-label="' +
+          esc(label) + ', libre">' + '<span class="num">' + d + '</span><span class="tag">Libre</span></button>';
+      }
+    }
+    var monthName = cap(first.toLocaleDateString(CONFIG.locale, { month: 'long', year: 'numeric' }));
+
+    return '<button class="btn secondary small back" data-action="back">&#8592; Volver</button>' +
+      '<h1 id="title" tabindex="-1">' + esc(namesOf(c)) + '</h1>' +
+      '<p class="lead">Toque un día verde para inscribirse.</p>' +
+      '<div class="month-nav">' +
+        '<button class="btn secondary" data-action="prevMonth"' + (atCurrent ? ' disabled' : '') + '>&#9664; Antes</button>' +
+        '<div class="month-label">' + esc(monthName) + '</div>' +
+        '<button class="btn secondary" data-action="nextMonth">Después &#9654;</button>' +
+      '</div>' +
+      '<div class="dow" aria-hidden="true"><div>Dom</div><div>Lun</div><div>Mar</div><div>Mié</div><div>Jue</div><div>Vie</div><div>Sáb</div></div>' +
+      '<div class="grid">' + cells + '</div>' +
+      '<div class="legend">' +
+        '<span><i class="swatch open"></i>Libre</span>' +
+        '<span><i class="swatch taken"></i>Ocupado</span>' +
+        '<span><i class="swatch today"></i>Hoy</span>' +
+      '</div>';
+  }
+
+  function viewDay() {
+    var c = state.comp, k = state.date;
+    var s = signupFor(c, k);
+    var head = '<button class="btn secondary small back" data-action="back">&#8592; Volver al calendario</button>' +
+      '<h1 id="title" tabindex="-1">' + esc(longDate(k)) + '</h1>' +
+      '<p class="lead">Misioneros: ' + esc(namesOf(c)) + '</p>';
+
+    if (s) {
+      return head +
+        '<div class="card"><p class="when">Este día ya está ocupado.</p>' +
+        '<p class="meta">' + esc(takenSentence(s)) + '</p></div>' +
+        '<p>Por favor regrese y elija un día verde.</p>' +
+        '<button class="btn" data-action="back">Elegir otro día</button>';
+    }
+
+    var opts = '<option value="">Toque aquí para elegir la hora</option>' +
+      timeOptions().map(function (t) { return '<option value="' + t + '">' + timeLabel(t) + '</option>'; }).join('');
+
+    return head +
+      '<form data-form="signup" novalidate>' +
+        typeChoices() +
+        '<label for="f-time">¿A qué hora?</label>' +
+        '<select id="f-time" name="time">' + opts + '</select>' +
+        '<label for="f-freq">¿Cuántas veces?</label>' +
+        '<select id="f-freq" name="freq">' +
+          '<option value="once">Solo este día</option>' +
+          '<option value="weekly">Recurrente: todas las semanas, el mismo día y a la misma hora</option>' +
+        '</select>' +
+        '<div id="weeks-box" hidden>' +
+          '<label for="f-weeks">¿Por cuántas semanas?<span class="hint">Este día cuenta como la primera semana.</span></label>' +
+          '<select id="f-weeks" name="weeks"><option value="">Toque aquí para elegir</option>' + weekOptions() + '</select>' +
+        '</div>' +
+        '<label for="f-name">Su nombre</label>' +
+        '<input id="f-name" name="name" type="text" autocomplete="name" placeholder="Ejemplo: María Pérez">' +
+        '<label for="f-phone">Su número de teléfono<span class="hint">Para que los misioneros o un líder puedan comunicarse con usted.</span></label>' +
+        '<input id="f-phone" name="phone" type="tel" inputmode="tel" autocomplete="tel" placeholder="Ejemplo: 305-555-1234">' +
+        '<label for="f-notes">Notas (opcional)<span class="hint">Lo que va a llevar, alergias, o su dirección si los misioneros van a su casa o pasan a recoger la comida.</span></label>' +
+        '<textarea id="f-notes" name="notes"></textarea>' +
+        '<div class="error" id="form-error" role="alert"></div>' +
+        '<button class="btn" type="submit" id="f-submit">Inscribirme</button>' +
+      '</form>';
+  }
+
+  function viewDone() {
+    var L = state.last;
+    var first = L.made[0];
+    var weekly = L.made.length > 1;
+    var when = weekly
+      ? 'Cada ' + parseKey(first.date).toLocaleDateString(CONFIG.locale, { weekday: 'long' }) + ' a las ' + timeLabel(first.time)
+      : longDate(first.date) + ' a las ' + timeLabel(first.time);
+    var datesList = weekly
+      ? '<p class="meta">Fechas agendadas:</p><ul class="dates">' +
+        L.made.map(function (r) { return '<li>' + esc(longDate(r.date)) + '</li>'; }).join('') + '</ul>'
+      : '';
+    var skipped = L.skipped.length
+      ? '<div class="notice"><p>Estos días ya estaban ocupados y no se pudieron agendar:</p><ul class="dates">' +
+        L.skipped.map(function (r) { return '<li>' + esc(longDate(r.date)) + '</li>'; }).join('') + '</ul></div>'
+      : '';
+    return '<div class="big-check" aria-hidden="true">&#10003;</div>' +
+      '<h1 id="title" tabindex="-1">' + (weekly ? '¡Sus invitaciones están listas!' : '¡Su invitación está lista!') + '</h1>' +
+      '<div class="card"><p class="when">' + esc(when) + '</p>' +
+      '<p class="meta">' + esc(TYPES[L.type] ? TYPES[L.type].card : '') + '</p>' +
+      '<p class="meta">Misioneros: ' + esc(namesOf(L.comp)) + '</p>' + datesList + '</div>' +
+      skipped +
+      '<p>¡Gracias! Por favor anótelo. Puede cancelar en cualquier momento en &laquo;Mis Invitaciones&raquo;.</p>' +
+      '<button class="btn" data-action="backToCalendar">Volver al calendario</button>' +
+      '<button class="btn secondary" data-action="home">Ir al inicio</button>';
+  }
+
+  function signupCard(s, opts) {
+    opts = opts || {};
+    var confirming = state.confirmId === s.id;
+    var detail = '';
+    if (opts.leader) {
+      detail = '<p class="meta">' + esc(s.name) + ' &middot; ' + esc(s.phone) + '</p>' +
+        (s.notes ? '<p class="meta">Notas: ' + esc(s.notes) + '</p>' : '');
+    }
+    var following = s.seriesId
+      ? state.data.signups.filter(function (x) { return x.seriesId === s.seriesId && x.date > s.date; }).length
+      : 0;
+    var verb = opts.leader ? 'quitar' : 'cancelar';
+    var idAttr = ' data-id="' + esc(s.id) + '"';
+    var action;
+    if (!confirming) {
+      action = '<button class="btn secondary small" data-action="cancelAsk"' + idAttr + '>' +
+        (opts.leader ? 'Quitar' : 'Cancelar esta invitación') + '</button>';
+    } else if (following > 0) {
+      action = '<div class="confirm"><p>Esta invitación se repite cada semana. ¿Qué desea ' + verb + '?</p>' +
+        '<div class="row">' +
+        '<button class="btn danger small" data-action="cancelYes"' + idAttr + ' data-scope="one">Solo este día</button>' +
+        '<button class="btn danger small" data-action="cancelYes"' + idAttr + ' data-scope="following">Este día y todos los siguientes</button>' +
+        '<button class="btn secondary small" data-action="cancelNo">No, mantener</button></div></div>';
+    } else {
+      action = '<div class="confirm"><p>' + (opts.leader ? '¿Quitar esta invitación?' : '¿Cancelar esta invitación?') + '</p>' +
+        '<div class="row"><button class="btn danger small" data-action="cancelYes"' + idAttr + ' data-scope="one">' +
+          (opts.leader ? 'Sí, quitar' : 'Sí, cancelar') + '</button>' +
+        '<button class="btn secondary small" data-action="cancelNo">No, mantener</button></div></div>';
+    }
+    var typeLine = typeCard(s) ? '<p class="meta">' + esc(typeCard(s)) + '</p>' : '';
+    var repeatLine = s.seriesId ? '<p class="meta">Recurrente: se repite cada semana.</p>' : '';
+    return '<div class="card"><p class="when">' + esc(longDate(s.date)) + ' a las ' + esc(timeLabel(s.time)) + '</p>' +
+      '<p class="meta">' + esc(namesOf(s.comp)) + '</p>' + typeLine + repeatLine + detail + action + '</div>';
+  }
+
+  function viewMine() {
+    var results = '';
+    if (state.searched) {
+      var mine = upcoming(state.data.signups.filter(function (s) { return nameMatches(s.name, state.nameQuery); }));
+      results = mine.length
+        ? '<h2>Sus próximas invitaciones</h2>' + mine.map(function (s) { return signupCard(s); }).join('')
+        : '<div class="empty">No encontramos próximas invitaciones con ese nombre. ' +
+          'Por favor revise cómo lo escribió e intente de nuevo.</div>';
+    }
+    return '<button class="btn secondary small back" data-action="back">&#8592; Volver</button>' +
+      '<h1 id="title" tabindex="-1">Mis Invitaciones</h1>' +
+      '<p class="lead">Escriba su nombre para ver sus invitaciones.</p>' +
+      '<form data-form="mine" novalidate>' +
+        '<label for="m-name">Su nombre<span class="hint">Escríbalo como lo escribió al invitar a los misioneros.</span></label>' +
+        '<input id="m-name" name="name" type="text" autocomplete="name" value="' + esc(state.nameQuery) + '" placeholder="Ejemplo: María Pérez">' +
+        '<div class="error" id="form-error" role="alert"></div>' +
+        '<button class="btn" type="submit">Buscar mis invitaciones</button>' +
+      '</form>' + results;
+  }
+
+  function viewLeaders() {
+    if (!state.leader) {
+      return '<button class="btn secondary small back" data-action="back">&#8592; Volver</button>' +
+        '<h1 id="title" tabindex="-1">Líderes</h1>' +
+        '<form data-form="pin" novalidate>' +
+          '<label for="pin">Escriba el PIN de los líderes</label>' +
+          '<input id="pin" name="pin" type="password" inputmode="numeric" autocomplete="off">' +
+          '<div class="error" id="form-error" role="alert"></div>' +
+          '<button class="btn" type="submit">Continuar</button>' +
+        '</form>';
+    }
+    var names = COMPS.map(function (c, i) {
+      return '<label for="n-' + c + '">Misioneros del compañerismo ' + (i + 1) +
+        '<span class="hint">Ejemplo: Élder Smith y Élder Jones</span></label>' +
+        '<input id="n-' + c + '" name="' + c + '" type="text" value="' + esc(state.data.settings[c] ? state.data.settings[c].names : '') + '">';
+    }).join('');
+
+    var list = COMPS.map(function (c) {
+      var items = upcoming(state.data.signups.filter(function (s) { return s.comp === c; }));
+      return '<h2>' + esc(namesOf(c)) + '</h2>' +
+        (items.length ? items.map(function (s) { return signupCard(s, { leader: true }); }).join('')
+                      : '<div class="empty">Todavía no hay comidas próximas.</div>');
+    }).join('');
+
+    return '<button class="btn secondary small back" data-action="back">&#8592; Volver</button>' +
+      '<h1 id="title" tabindex="-1">Líderes</h1>' +
+      (state.msg ? '<div class="ok" role="status">' + esc(state.msg) + '</div>' : '') +
+      '<h2>Nombres de los misioneros</h2>' +
+      '<p>Actualice estos nombres cuando los misioneros sean transferidos. Las inscripciones que ya existen se quedan en el calendario.</p>' +
+      '<form data-form="names" novalidate>' + names +
+        '<div class="error" id="form-error" role="alert"></div>' +
+        '<button class="btn" type="submit">Guardar nombres</button>' +
+      '</form>' +
+      '<h2 style="margin-top:36px">Todas las próximas comidas</h2>' + list +
+      '<button class="btn secondary" data-action="logout">Salir de la página de líderes</button>';
+  }
+
+  /* =====================================================================
+     RENDER
+     ===================================================================== */
+  function render(moveFocus) {
+    var html;
+    switch (state.view) {
+      case 'calendar': html = viewCalendar(); break;
+      case 'day': html = viewDay(); break;
+      case 'done': html = viewDone(); break;
+      case 'mine': html = viewMine(); break;
+      case 'leaders': html = viewLeaders(); break;
+      default: html = viewHome();
+    }
+    app.innerHTML = html;
+    if (moveFocus) {
+      window.scrollTo(0, 0);
+      var h = document.getElementById('title');
+      if (h) { h.focus({ preventScroll: true }); }
+    }
+  }
+  function go(view, extra) {
+    state.view = view;
+    state.confirmId = null;
+    if (extra) { Object.keys(extra).forEach(function (k) { state[k] = extra[k]; }); }
+    render(true);
+  }
+  function showError(msg) {
+    var el = document.getElementById('form-error');
+    if (el) { el.textContent = msg; el.scrollIntoView({ block: 'center' }); }
+  }
+  function refresh(silent) {
+    return Store.load().then(function (d) {
+      if (d && d.signups) {
+        if (!d.settings) { d.settings = clone(DEFAULT_SETTINGS); }
+        COMPS.forEach(function (c) { if (!d.settings[c]) { d.settings[c] = DEFAULT_SETTINGS[c]; } });
+        state.data = d;
+      }
+    }).catch(function () {
+      if (!silent) { showError('No pudimos cargar el calendario. Por favor revise su internet e intente de nuevo.'); }
+    });
+  }
+
+  /* =====================================================================
+     EVENTS
+     ===================================================================== */
+  app.addEventListener('click', function (e) {
+    var el = e.target.closest('[data-action]');
+    if (!el || el.disabled) { return; }
+    var a = el.getAttribute('data-action');
+
+    if (a === 'openComp') {
+      var now = new Date();
+      state.comp = el.getAttribute('data-comp');
+      state.y = now.getFullYear(); state.m = now.getMonth();
+      refresh(true).then(function () { go('calendar'); });
+    } else if (a === 'prevMonth') {
+      state.m--; if (state.m < 0) { state.m = 11; state.y--; }
+      render(false);
+    } else if (a === 'nextMonth') {
+      state.m++; if (state.m > 11) { state.m = 0; state.y++; }
+      render(false);
+    } else if (a === 'pickDay') {
+      refresh(true).then(function () { go('day', { date: el.getAttribute('data-date') }); });
+    } else if (a === 'back') {
+      if (state.view === 'day') { go('calendar'); } else { go('home'); }
+    } else if (a === 'backToCalendar') {
+      go('calendar');
+    } else if (a === 'home') {
+      go('home');
+    } else if (a === 'mine') {
+      go('mine', { searched: false, nameQuery: '' });
+    } else if (a === 'leaders') {
+      go('leaders', { msg: '' });
+    } else if (a === 'logout') {
+      go('home', { leader: false, msg: '' });
+    } else if (a === 'cancelAsk') {
+      state.confirmId = el.getAttribute('data-id'); render(false);
+    } else if (a === 'cancelNo') {
+      state.confirmId = null; render(false);
+    } else if (a === 'cancelYes') {
+      var id = el.getAttribute('data-id');
+      var scope = el.getAttribute('data-scope') || 'one';
+      var target = state.data.signups.filter(function (x) { return x.id === id; })[0];
+      var ids = [id];
+      if (scope === 'following' && target && target.seriesId) {
+        ids = state.data.signups.filter(function (x) {
+          return x.seriesId === target.seriesId && x.date >= target.date;
+        }).map(function (x) { return x.id; });
+      }
+      el.disabled = true;
+      ids.reduce(function (p, sid) {
+        return p.then(function () { return Store.remove(sid); });
+      }, Promise.resolve()).then(function () { return refresh(true); }).then(function () {
+        state.confirmId = null;
+        if (state.view === 'leaders') {
+          state.msg = ids.length > 1 ? 'Las invitaciones fueron quitadas.' : 'La invitación fue quitada.';
+        }
+        render(false);
+      }).catch(function () {
+        el.disabled = false;
+        showError('Eso no funcionó. Por favor intente de nuevo.');
+      });
+    }
+  });
+
+  app.addEventListener('change', function (e) {
+    if (e.target && e.target.id === 'f-freq') {
+      var box = document.getElementById('weeks-box');
+      if (box) { box.hidden = e.target.value !== 'weekly'; }
+    }
+  });
+
+  app.addEventListener('submit', function (e) {
+    e.preventDefault();
+    var form = e.target;
+    var kind = form.getAttribute('data-form');
+    var f = form.elements;
+
+    if (kind === 'signup') {
+      var time = f.time.value;
+      var name = f.name.value.trim();
+      var phone = f.phone.value.trim();
+      var notes = f.notes.value.trim();
+      var type = f.type.value;
+      var weekly = f.freq.value === 'weekly';
+      var weeks = weekly ? parseInt(f.weeks.value, 10) : 1;
+      if (!type) { showError('Por favor elija el tipo de invitación.'); return; }
+      if (!time) { showError('Por favor elija la hora.'); f.time.focus(); return; }
+      if (weekly && !weeks) { showError('Por favor elija por cuántas semanas.'); f.weeks.focus(); return; }
+      if (name.length < 2) { showError('Por favor escriba su nombre.'); f.name.focus(); return; }
+      if (digits(phone).length < 10) { showError('Por favor escriba su número de teléfono completo, con el código de área.'); f.phone.focus(); return; }
+      var btn = document.getElementById('f-submit');
+      btn.disabled = true; btn.textContent = 'Guardando...';
+      var seriesId = weeks > 1 ? 'r' + Date.now() + Math.random().toString(36).slice(2, 7) : null;
+      var start = parseKey(state.date);
+      var recs = [];
+      for (var w = 0; w < weeks; w++) {
+        var dt = new Date(start.getFullYear(), start.getMonth(), start.getDate() + 7 * w);
+        var r = {
+          comp: state.comp, date: keyOf(dt.getFullYear(), dt.getMonth(), dt.getDate()),
+          time: time, name: name, phone: phone, notes: notes, type: type
+        };
+        if (seriesId) { r.seriesId = seriesId; }
+        recs.push(r);
+      }
+      var made = [], skipped = [], compNow = state.comp;
+      recs.reduce(function (p, r) {
+        return p.then(function () {
+          return Store.add(r).then(function () { made.push(r); }).catch(function (err) {
+            if (err && err.message === 'TAKEN') { skipped.push(r); } else { throw err; }
+          });
+        });
+      }, Promise.resolve()).then(function () {
+        if (!made.length) { throw new Error('TAKEN'); }
+        return refresh(true);
+      }).then(function () {
+        go('done', { last: { comp: compNow, made: made, skipped: skipped, type: type } });
+      }).catch(function (err) {
+        btn.disabled = false; btn.textContent = 'Inscribirme';
+        if (err && err.message === 'TAKEN') {
+          refresh(true).then(function () {
+            render(false);
+            showError('Lo sentimos, alguien acaba de inscribirse para este día. Por favor regrese y elija otro día.');
+          });
+        } else {
+          showError('No pudimos guardar su inscripción. Por favor revise su internet e intente de nuevo.');
+        }
+      });
+    } else if (kind === 'mine') {
+      var q = f.name.value.trim();
+      if (norm(q).length < 2) { showError('Por favor escriba su nombre.'); return; }
+      refresh(true).then(function () {
+        state.nameQuery = q; state.searched = true; state.confirmId = null;
+        render(false);
+      });
+    } else if (kind === 'pin') {
+      if (f.pin.value === CONFIG.leaderPin) {
+        refresh(true).then(function () { go('leaders', { leader: true, msg: '' }); });
+      } else {
+        showError('El PIN no es correcto. Por favor intente de nuevo.');
+      }
+    } else if (kind === 'names') {
+      var st = clone(state.data.settings);
+      COMPS.forEach(function (c) {
+        var v = f[c].value.trim();
+        st[c] = { names: v || DEFAULT_SETTINGS[c].names };
+      });
+      Store.saveSettings(st).then(function () { return refresh(true); }).then(function () {
+        state.msg = 'Nombres guardados.'; render(true);
+      }).catch(function () { showError('No pudimos guardar los nombres. Por favor intente de nuevo.'); });
+    }
+  });
+
+  /* =====================================================================
+     START + LIVE REFRESH
+     ===================================================================== */
+  refresh(false).then(function () { render(false); });
+  render(false);
+
+  // Quietly refresh the calendar so people see new sign-ups without reloading.
+  setInterval(function () {
+    if (state.view === 'home' || state.view === 'calendar') {
+      refresh(true).then(function () { render(false); });
+    }
+  }, CONFIG.refreshSeconds * 1000);
+})();
+</script>
+</body>
+</html>
