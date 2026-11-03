@@ -238,9 +238,11 @@
      Shapes the UI works with:
        data:   { settings: { A: {names}, B: {names} },
                  signups: [{ id, comp, date: "YYYY-MM-DD", time: "18:00", type, name, seriesId }] }
-       leader: the same, plus phone and notes on each signup.
+       leader: the same, plus phone and notes on each signup (and missionaryPin on leaderLoad).
+       missionary: the leader's shape, read with the missionaries' 4-digit PIN.
      Errors are Error objects with .code ("taken", "invalid_input", "wrong_phone",
-     "not_allowed", "network", ...) and .message (Spanish text from the server, when it sent one).
+     "not_allowed", "pin_not_set", "wrong_pin", "network", ...) and .message (Spanish text from
+     the server, when it sent one).
      ===================================================================== */
   function clone(o) { return JSON.parse(JSON.stringify(o)); }
 
@@ -292,14 +294,22 @@
     },
     leaderLoad: function () {
       return this._call('leaderList').then(function (d) {
-        return { allowed: !!d.allowed, loggedIn: !!d.loggedIn, userId: d.userId || '', data: d.allowed ? normalize(d) : null };
+        return {
+          allowed: !!d.allowed, loggedIn: !!d.loggedIn, userId: d.userId || '',
+          data: d.allowed ? normalize(d) : null, missionaryPin: d.missionaryPin || ''
+        };
       });
     },
     leaderRemove: function (id, scope) {
       return this._call('leaderRemove', { id: id, scope: scope });
     },
-    saveSettings: function (a, b) {
-      return this._call('saveSettings', { A: a, B: b });
+    // fields: any of { A, B, pin }; the endpoint writes only the keys sent.
+    saveSettings: function (fields) {
+      return this._call('saveSettings', fields);
+    },
+    // The missionaries' read-only list (with phone and notes). POST so the PIN stays out of URLs.
+    missionaryLoad: function (pin) {
+      return this._call('missionaryList', { pin: String(pin) }).then(normalize);
     }
   };
 
@@ -312,7 +322,8 @@
         var raw = window.localStorage.getItem(this.key);
         if (raw) { return JSON.parse(raw); }
       } catch (e) {}
-      if (!this._mem) { this._mem = { settings: { A: '', B: '' }, signups: [] }; }
+      // The demo starts with no missionaries' PIN (view closed), like the live calendar.
+      if (!this._mem) { this._mem = { settings: { A: '', B: '' }, signups: [], pin: '' }; }
       return this._mem;
     },
     _write: function (d) {
@@ -371,20 +382,70 @@
     },
     leaderLoad: function () {
       var d = this._read();
-      return Promise.resolve({ allowed: true, loggedIn: true, userId: 'demo', data: normalize({ settings: d.settings, invitations: clone(d.signups) }) });
+      return Promise.resolve({
+        allowed: true, loggedIn: true, userId: 'demo',
+        data: normalize({ settings: d.settings, invitations: clone(d.signups) }), missionaryPin: d.pin || ''
+      });
     },
     leaderRemove: function (id, scope) {
       return Promise.resolve(this._remove(id, scope, null));
     },
-    saveSettings: function (a, b) {
+    saveSettings: function (fields) {
       var d = this._read();
-      d.settings = { A: a, B: b };
+      var has = function (k) { return Object.prototype.hasOwnProperty.call(fields, k); };
+      if (!has('A') && !has('B') && !has('pin')) {
+        return Promise.reject(storeError('invalid_input', 'No hay nada que guardar.', 400));
+      }
+      var pin = typeof fields.pin === 'string' ? fields.pin.trim() : '';
+      if (has('pin') && (typeof fields.pin !== 'string' || (pin !== '' && !/^[0-9]{4}$/.test(pin)))) {
+        return Promise.reject(storeError('invalid_input',
+          'El PIN debe tener exactamente 4 dígitos, o dejarse vacío para cerrar la página.', 400));
+      }
+      d.settings = d.settings || { A: '', B: '' };
+      if (has('A')) { d.settings.A = fields.A; }
+      if (has('B')) { d.settings.B = fields.B; }
+      if (has('pin')) { d.pin = pin; }
       this._write(d);
-      return Promise.resolve({ settings: normalize({ settings: d.settings }).settings });
+      return Promise.resolve({ settings: normalize({ settings: d.settings }).settings, missionaryPin: d.pin || '' });
+    },
+    missionaryLoad: function (pin) {
+      var d = this._read();
+      var given = String(pin == null ? '' : pin);
+      if (!/^[0-9]{4}$/.test(given)) {
+        return Promise.reject(storeError('invalid_input', 'Escriba el PIN de 4 dígitos.', 400));
+      }
+      if (!/^[0-9]{4}$/.test(d.pin || '')) {
+        return Promise.reject(storeError('pin_not_set',
+          'La página de los misioneros no está abierta todavía. Pida el PIN a su líder.', 403));
+      }
+      if (given !== d.pin) {
+        return Promise.reject(storeError('wrong_pin', 'El PIN no es correcto. Por favor intente de nuevo.', 403));
+      }
+      var t = todayKey();
+      return Promise.resolve(normalize({
+        settings: d.settings,
+        invitations: clone(d.signups.filter(function (s) { return s.date >= t; }))
+      }));
     }
   };
 
   var Store = DEMO ? LocalStore : RemoteStore;
+
+  // The missionaries' PIN is kept for this browser tab only (sessionStorage), never in
+  // localStorage. If the browser blocks storage, it lives in memory until the page closes.
+  var PIN_KEY = 'comida-misioneros-pin';
+  var memPin = '';
+  function getPin() {
+    try { return window.sessionStorage.getItem(PIN_KEY) || ''; } catch (e) { return memPin; }
+  }
+  function savePin(p) {
+    memPin = p;
+    try { window.sessionStorage.setItem(PIN_KEY, p); } catch (e) {}
+  }
+  function clearPin() {
+    memPin = '';
+    try { window.sessionStorage.removeItem(PIN_KEY); } catch (e) {}
+  }
 
   /* =====================================================================
      HELPERS
@@ -493,6 +554,7 @@
     searched: false,
     confirmId: null,
     leader: { status: 'checking' },   // checking | signin | denied | ok | error
+    miss: { status: 'pin', error: '' },   // missionaries' view: checking | pin | ok | error
     msg: '',
     last: null
   };
@@ -517,7 +579,7 @@
 
   /* =====================================================================
      ROUTES  (hash only: #/, #/c/A, #/c/A/2026-12, #/c/A/2026-12-05, #/c/A/listo,
-              #/mis-invitaciones, #/lideres)
+              #/mis-invitaciones, #/misioneros, #/lideres)
      ===================================================================== */
   function parseRoute() {
     var p = (location.hash || '').replace(/^#\/?/, '').split('/').filter(Boolean);
@@ -529,6 +591,7 @@
       return { view: 'calendar', comp: p[1] };
     }
     if (p[0] === 'mis-invitaciones') { return { view: 'mine' }; }
+    if (p[0] === 'misioneros') { return { view: 'missionary' }; }
     if (p[0] === 'lideres') { return { view: 'leaders' }; }
     return { view: 'home' };
   }
@@ -574,6 +637,9 @@
       state.searched = false;
     } else if (r.view === 'leaders') {
       state.leader = { status: 'checking' };
+    } else if (r.view === 'missionary') {
+      // A PIN kept from earlier in this tab is tried automatically.
+      state.miss = getPin() ? { status: 'checking' } : { status: 'pin', error: '' };
     }
     state.view = r.view;
 
@@ -585,6 +651,13 @@
     } else if (r.view === 'leaders') {
       render(true);
       loadLeader().then(function () { render(true); });
+    } else if (r.view === 'missionary') {
+      render(true);
+      if (state.miss.status === 'checking') {
+        loadMissionary(getPin(), false).then(function () {
+          if (state.view === 'missionary') { render(true); }
+        });
+      }
     } else {
       render(true);
       if (r.view !== 'done') {
@@ -622,7 +695,10 @@
       loadErrorBox() +
       cards +
       '<button class="btn secondary" data-action="mine">Mis Invitaciones</button>' +
-      '<div class="foot"><button class="link" data-action="leaders">Solo para líderes</button></div>';
+      '<div class="foot">' +
+        '<button class="link" data-action="missionaries">Para los misioneros</button> ' +
+        '<button class="link" data-action="leaders">Solo para líderes</button>' +
+      '</div>';
   }
 
   function viewCalendar() {
@@ -758,11 +834,13 @@
   }
 
   // One invitation card. list = the signups it belongs to (for counting later dates of a series).
+  // opts.leader: phone, notes and a Quitar button. opts.readOnly: phone and notes, no button
+  // (the missionaries' view).
   function signupCard(s, list, opts) {
     opts = opts || {};
     var confirming = state.confirmId === s.id;
     var detail = '';
-    if (opts.leader) {
+    if (opts.leader || opts.readOnly) {
       detail = '<p class="meta">' + esc(s.name) + ' &middot; ' + esc(s.phone) + '</p>' +
         (s.notes ? '<p class="meta">Notas: ' + esc(s.notes) + '</p>' : '');
     }
@@ -777,7 +855,9 @@
       '<input id="p4" type="text" inputmode="numeric" autocomplete="off" maxlength="4" pattern="[0-9]*">';
     var cardError = '<div class="error" id="card-error" role="alert"></div>';
     var action;
-    if (!confirming) {
+    if (opts.readOnly) {
+      action = '';
+    } else if (!confirming) {
       action = '<button class="btn secondary small" data-action="cancelAsk"' + idAttr + '>' +
         (opts.leader ? 'Quitar' : 'Cancelar esta invitación') + '</button>';
     } else if (following > 0) {
@@ -823,6 +903,50 @@
       results;
   }
 
+  // Every upcoming meal per companionship (the leaders' layout). cardOpts picks the card mode.
+  function upcomingByComp(data, cardOpts) {
+    return COMPS.map(function (c) {
+      var items = upcoming(data.signups.filter(function (s) { return s.comp === c; }));
+      return '<h2>' + esc(namesOf(c)) + '</h2>' +
+        (items.length ? items.map(function (s) { return signupCard(s, data.signups, cardOpts); }).join('')
+                      : '<div class="empty">Todavía no hay comidas próximas.</div>');
+    }).join('');
+  }
+
+  function viewMissionary() {
+    var head = demoBanner() +
+      '<button class="btn secondary small back" data-action="home">&#8592; Volver</button>' +
+      '<h1 id="title" tabindex="-1">Para los misioneros</h1>';
+    var M = state.miss;
+
+    if (M.status === 'checking') {
+      return head + '<p class="loading">Revisando el PIN...</p>';
+    }
+    if (M.status === 'error') {
+      return head +
+        '<div class="error" role="alert">No pudimos cargar las comidas. Por favor revise su internet e intente de nuevo.</div>' +
+        '<button class="btn" data-action="missionaryRetry">Intentar de nuevo</button>' +
+        '<button class="btn secondary" data-action="missionaryExit">Salir</button>';
+    }
+    if (M.status === 'pin') {
+      return head +
+        '<p class="lead">Escriba el PIN que le dio su líder para ver todas las próximas comidas.</p>' +
+        '<form data-form="missionaryPin" novalidate>' +
+          '<label for="mp-pin">PIN de los misioneros<span class="hint">4 números</span></label>' +
+          '<input id="mp-pin" name="pin" type="password" inputmode="numeric" autocomplete="off" maxlength="4" pattern="[0-9]*">' +
+          '<div class="error" id="form-error" role="alert">' + esc(M.error) + '</div>' +
+          '<button class="btn" type="submit" id="mp-submit">Ver las comidas</button>' +
+        '</form>';
+    }
+
+    // status === 'ok': read-only, no Quitar buttons, no names form.
+    return head +
+      '<p class="lead">Todas las próximas comidas. Esta página se actualiza sola.</p>' +
+      upcomingByComp(M.data, { readOnly: true }) +
+      '<button class="btn secondary" data-action="missionaryExit">Salir</button>' +
+      '<p class="hint">Al salir, este dispositivo olvida el PIN.</p>';
+  }
+
   function viewLeaders() {
     var head = demoBanner() +
       '<button class="btn secondary small back" data-action="home">&#8592; Volver</button>' +
@@ -862,12 +986,35 @@
         '<input id="n-' + c + '" name="' + c + '" type="text" maxlength="120" value="' + esc(v) + '">';
     }).join('');
 
-    var list = COMPS.map(function (c) {
-      var items = upcoming(data.signups.filter(function (s) { return s.comp === c; }));
-      return '<h2>' + esc(namesOf(c)) + '</h2>' +
-        (items.length ? items.map(function (s) { return signupCard(s, data.signups, { leader: true }); }).join('')
-                      : '<div class="empty">Todavía no hay comidas próximas.</div>');
-    }).join('');
+    var list = upcomingByComp(data, { leader: true });
+
+    // The missionaries' PIN (leader only). Shown in clear: the leader shares it.
+    var pin = L.pin || '';
+    var pinState = pin
+      ? '<p>La página de los misioneros está abierta con este PIN.</p>'
+      : '<p>Todavía no hay PIN: la página de los misioneros está cerrada.</p>';
+    var pinClear = '';
+    if (pin && L.pinConfirm) {
+      pinClear = '<div class="confirm"><p>¿Quitar el PIN? Los misioneros ya no podrán ver las comidas.</p>' +
+        '<div class="row">' +
+        '<button class="btn danger small" type="button" data-action="pinClearYes">Sí, quitar el PIN</button>' +
+        '<button class="btn secondary small" type="button" data-action="pinClearNo">No, mantener</button></div></div>';
+    } else if (pin) {
+      pinClear = '<button class="btn secondary" type="button" data-action="pinClearAsk">Quitar el PIN</button>';
+    }
+    var pinSection =
+      '<h2 style="margin-top:36px">PIN de los misioneros</h2>' +
+      '<p>Con este PIN los misioneros ven todas las próximas comidas, con teléfono y notas, en «Para los misioneros».</p>' +
+      pinState +
+      '<form data-form="pin" novalidate>' +
+        '<label for="l-pin">PIN de 4 números' +
+          '<span class="hint">Compártalo solo con los misioneros. Cámbielo cuando haya traslados.</span></label>' +
+        '<input id="l-pin" name="pin" type="text" inputmode="numeric" autocomplete="off" maxlength="4" pattern="[0-9]*" value="' + esc(pin) + '">' +
+        '<div class="error" id="pin-error" role="alert"></div>' +
+        (L.pinMsg ? '<div class="ok" role="status">' + esc(L.pinMsg) + '</div>' : '') +
+        '<button class="btn" type="submit" id="l-pin-save">Guardar PIN</button>' +
+      '</form>' +
+      pinClear;
 
     return head +
       (state.msg ? '<div class="ok" role="status">' + esc(state.msg) + '</div>' : '') +
@@ -877,6 +1024,7 @@
         '<div class="error" id="form-error" role="alert"></div>' +
         '<button class="btn" type="submit" id="n-submit">Guardar nombres</button>' +
       '</form>' +
+      pinSection +
       '<h2 style="margin-top:36px">Todas las próximas comidas</h2>' + list +
       '<button class="btn secondary" data-action="home">Salir de la página de líderes</button>';
   }
@@ -900,6 +1048,7 @@
       case 'done': html = viewDone(); break;
       case 'mine': html = viewMine(); break;
       case 'leaders': html = viewLeaders(); break;
+      case 'missionary': html = viewMissionary(); break;
       default: html = viewHome();
     }
     app.innerHTML = html;
@@ -935,11 +1084,33 @@
       if (!r.loggedIn) { state.leader = { status: 'signin' }; }
       else if (!r.allowed) { state.leader = { status: 'denied', userId: r.userId }; }
       else {
-        state.leader = { status: 'ok', userId: r.userId, data: r.data };
+        state.leader = { status: 'ok', userId: r.userId, data: r.data, pin: r.missionaryPin || '' };
         state.data.settings = r.data.settings;
       }
     }, function () {
       state.leader = { status: 'error' };
+    });
+  }
+  // Load the missionaries' list with a PIN. A refused PIN (400/403) is forgotten and the PIN
+  // screen shows the server's message. A network error keeps what is on screen when silent
+  // (quiet refresh), else shows the retry screen. Resolves true when the screen may have changed.
+  function loadMissionary(pin, silent) {
+    var before = JSON.stringify(state.miss);
+    return Store.missionaryLoad(pin).then(function (d) {
+      savePin(pin);
+      state.miss = { status: 'ok', data: d };
+      state.data.settings = d.settings;
+      return JSON.stringify(state.miss) !== before;
+    }, function (err) {
+      var code = err && err.code;
+      if (code === 'wrong_pin' || code === 'pin_not_set' || code === 'invalid_input') {
+        clearPin();
+        state.miss = { status: 'pin', error: err.serverMessage || 'El PIN no es correcto. Por favor intente de nuevo.' };
+        return true;
+      }
+      if (silent) { return false; }
+      state.miss = { status: 'error' };
+      return true;
     });
   }
 
@@ -969,6 +1140,33 @@
       nav('#/mis-invitaciones');
     } else if (a === 'leaders') {
       nav('#/lideres');
+    } else if (a === 'missionaries') {
+      nav('#/misioneros');
+    } else if (a === 'missionaryRetry') {
+      if (!getPin()) { state.miss = { status: 'pin', error: '' }; render(true); return; }
+      state.miss = { status: 'checking' };
+      render(true);
+      loadMissionary(getPin(), false).then(function () {
+        if (state.view === 'missionary') { render(true); }
+      });
+    } else if (a === 'missionaryExit') {
+      // Forget the PIN in this tab and drop the list from memory.
+      clearPin();
+      state.miss = { status: 'pin', error: '' };
+      nav('#/');
+    } else if (a === 'pinClearAsk') {
+      state.leader.pinConfirm = true;
+      state.leader.pinMsg = '';
+      render(false);
+      var yes = app.querySelector('[data-action="pinClearYes"]');
+      if (yes) { yes.focus(); }
+    } else if (a === 'pinClearNo') {
+      state.leader.pinConfirm = false;
+      render(false);
+      var ask = app.querySelector('[data-action="pinClearAsk"]');
+      if (ask) { ask.focus(); }
+    } else if (a === 'pinClearYes') {
+      saveMissionaryPin('', el);
     } else if (a === 'leaderCheck') {
       state.leader = { status: 'checking' };
       render(true);
@@ -1025,6 +1223,33 @@
         showError('Su sesión de BlueStep terminó. Por favor inicie sesión de nuevo.', 'card-error');
       } else {
         showError('Eso no funcionó. Por favor revise su internet e intente de nuevo.', 'card-error');
+      }
+    });
+  }
+
+  // Leader: save ("1234") or clear ("") the missionaries' PIN. Only the pin key is sent, so the
+  // names stay as they are. btn is disabled while saving.
+  function saveMissionaryPin(pin, btn) {
+    var label = btn.textContent;
+    btn.disabled = true; btn.textContent = 'Guardando...';
+    Store.saveSettings({ pin: pin }).then(function (d) {
+      if (state.view !== 'leaders' || state.leader.status !== 'ok') { return; }
+      state.leader.pin = (d && d.missionaryPin) || '';
+      state.leader.pinConfirm = false;
+      state.leader.pinMsg = state.leader.pin
+        ? 'PIN guardado. Compártalo con los misioneros.'
+        : 'PIN quitado. La página de los misioneros está cerrada.';
+      render(false);
+      var input = document.getElementById('l-pin');
+      if (input) { input.focus({ preventScroll: true }); }
+    }).catch(function (err) {
+      btn.disabled = false; btn.textContent = label;
+      if (err && err.code === 'not_allowed') {
+        showError('Su sesión de BlueStep terminó. Por favor inicie sesión de nuevo.', 'pin-error');
+      } else if (err && err.code === 'invalid_input' && err.serverMessage) {
+        showError(err.serverMessage, 'pin-error');
+      } else {
+        showError('No pudimos guardar el PIN. Por favor intente de nuevo.', 'pin-error');
       }
     });
   }
@@ -1090,7 +1315,7 @@
       var a = f.A.value.trim(), b = f.B.value.trim();
       var save = document.getElementById('n-submit');
       save.disabled = true; save.textContent = 'Guardando...';
-      Store.saveSettings(a, b).then(function () {
+      Store.saveSettings({ A: a, B: b }).then(function () {
         return Promise.all([loadLeader(), refresh(true)]);
       }).then(function () {
         state.msg = 'Nombres guardados.';
@@ -1105,6 +1330,35 @@
           showError('No pudimos guardar los nombres. Por favor intente de nuevo.');
         }
       });
+    } else if (kind === 'pin') {
+      var newPin = digits(f.pin.value);
+      if (newPin.length !== 4) {
+        showError('Por favor escriba un PIN de 4 números.', 'pin-error');
+        f.pin.focus();
+        return;
+      }
+      saveMissionaryPin(newPin, document.getElementById('l-pin-save'));
+    } else if (kind === 'missionaryPin') {
+      // Strip spaces and dashes ("12 34") before sending; the server wants exactly 4 digits.
+      var tryPin = digits(f.pin.value);
+      if (tryPin.length !== 4) {
+        showError('Por favor escriba el PIN de 4 números.');
+        f.pin.focus();
+        return;
+      }
+      state.miss = { status: 'pin', error: '' };
+      var go = document.getElementById('mp-submit');
+      go.disabled = true; go.textContent = 'Revisando...';
+      loadMissionary(tryPin, true).then(function () {
+        if (state.view !== 'missionary') { return; }
+        if (state.miss.status === 'ok') { render(true); return; }
+        go.disabled = false; go.textContent = 'Ver las comidas';
+        f.pin.value = '';
+        f.pin.focus();
+        showError(state.miss.status === 'pin' && state.miss.error
+          ? state.miss.error
+          : 'No pudimos revisar el PIN. Por favor revise su internet e intente de nuevo.');
+      });
     }
   });
 
@@ -1115,11 +1369,18 @@
   applyRoute();
 
   // Quietly refresh the calendar so people see new sign-ups without reloading. Only on the
-  // home and calendar screens (never while a form is open), and only re-drawn when it changed.
+  // home and calendar screens and the missionaries' list (never while a form is open), and only
+  // re-drawn when it changed. If the leader changed the PIN, the missionaries' refresh gets a
+  // 403: the PIN is forgotten and the PIN screen shows the message.
   setInterval(function () {
     if (document.hidden) { return; }
     if (state.view === 'home' || state.view === 'calendar') {
       refresh(true).then(function (changed) { if (changed) { render(false); } });
+    } else if (state.view === 'missionary' && state.miss.status === 'ok' && getPin()) {
+      loadMissionary(getPin(), true).then(function (changed) {
+        if (!changed || state.view !== 'missionary') { return; }
+        render(state.miss.status !== 'ok');
+      });
     }
   }, CONFIG.refreshSeconds * 1000);
 })();

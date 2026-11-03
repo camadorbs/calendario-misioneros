@@ -16,9 +16,15 @@ a meal. Served as a **BlueStep Git Site** under `/spa/` at `https://comidamision
   and never sends phone numbers or notes to members. It answers this site's origin only (CORS).
 - **Members** need no login. Cancelling asks for the last 4 digits of the phone they gave.
 - **Leaders** sign in to BlueStep on the sandbox; the endpoint checks their user id against the
-  Líderes list. There is no PIN in the page.
+  Líderes list.
+- **Missionaries** open "Para los misioneros" (`#/misioneros`) and type a 4-digit PIN to see
+  every upcoming meal with phone and notes, read-only. The leader sets, changes or removes the
+  PIN on the Líderes page; it is stored on the platform (Configuración) and checked by the
+  endpoint (`missionaryList`), never kept in this repo or the page source. The page keeps it in
+  `sessionStorage` for the tab only; "Salir" or a refused PIN forgets it. No PIN set means the
+  view is closed. A 4-digit PIN can be guessed (no lockout, accepted): change it after transfers.
 - **Routes** are hash-only, so Back and reload work: `#/`, `#/c/A`, `#/c/A/2026-12`,
-  `#/c/A/2026-12-05`, `#/mis-invitaciones`, `#/lideres`.
+  `#/c/A/2026-12-05`, `#/mis-invitaciones`, `#/misioneros`, `#/lideres`.
 - **Demo mode:** add `?demo` to the address to save in the browser only (testing the page without
   the platform; the live endpoint refuses other origins).
 
