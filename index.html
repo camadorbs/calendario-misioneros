@@ -112,6 +112,7 @@
     border-radius: 14px; padding: 18px; margin: 14px 0;
   }
   .card .when { font-weight: 700; font-size: 1.2rem; }
+  .card .who { font-weight: 700; font-size: 1.15em; overflow-wrap: anywhere; }
   .meta { color: #384555; overflow-wrap: anywhere; }
 
   .month-nav { display: grid; grid-template-columns: 1fr 1.6fr 1fr; gap: 8px; align-items: center; margin: 14px 0; }
@@ -188,6 +189,24 @@
   .hp { position: absolute; left: -10000px; top: auto; width: 1px; height: 1px; overflow: hidden; }
   @media (prefers-reduced-motion: no-preference) {
     .btn, .comp, .day { transition: background-color .12s ease; }
+  }
+  /* "Exportar a PDF": the browser's print dialog ("Guardar como PDF") prints only .print-area. */
+  .print-only { display: none; }
+  @media print {
+    @page { margin: 14mm; }
+    body { background: #fff; font-size: 12pt; }
+    .wrap { max-width: none; padding: 0; }
+    #app:has(.print-area) > :not(.print-area) { display: none !important; }
+    .print-only { display: block; }
+    .print-only h1 { font-size: 18pt; margin: 0 0 4pt; }
+    .print-area h2 { font-size: 14pt; margin: 14pt 0 6pt; break-after: avoid; }
+    .print-area .btn, .print-area .confirm { display: none !important; }
+    .card { break-inside: avoid; border: 1px solid #999; border-radius: 6px; padding: 8pt; margin: 6pt 0; }
+    .card .when { font-size: 12pt; }
+    .card .who { font-size: 13pt; }
+    .meta { color: #000; }
+    p { margin: 0 0 3pt; }
+    .empty { padding: 6pt; }
   }
 </style>
 </head>
@@ -835,7 +854,8 @@
 
   // One invitation card. list = the signups it belongs to (for counting later dates of a series).
   // opts.leader: phone, notes and a Quitar button. opts.readOnly: phone and notes, no button
-  // (the missionaries' view).
+  // (the missionaries' view). opts.grouped: under a companionship heading (name first, no
+  // companionship line).
   function signupCard(s, list, opts) {
     opts = opts || {};
     var confirming = state.confirmId === s.id;
@@ -874,6 +894,14 @@
     }
     var typeLine = typeCard(s) ? '<p class="meta">' + esc(typeCard(s)) + '</p>' : '';
     var repeatLine = s.seriesId ? '<p class="meta">Recurrente: se repite cada semana.</p>' : '';
+    if (opts.grouped) {
+      // Under a companionship heading: member's name on top, then phone, the meal, notes last.
+      return '<div class="card"><p class="who">' + esc(s.name) + '</p>' +
+        '<p class="meta">' + esc(s.phone) + '</p>' +
+        '<p class="meta"><strong>' + esc(longDate(s.date)) + ' a las ' + esc(timeLabel(s.time)) + '</strong></p>' +
+        typeLine + repeatLine +
+        (s.notes ? '<p class="meta">Notas: ' + esc(s.notes) + '</p>' : '') + action + '</div>';
+    }
     return '<div class="card"><p class="when">' + esc(longDate(s.date)) + ' a las ' + esc(timeLabel(s.time)) + '</p>' +
       '<p class="meta">' + esc(namesOf(s.comp)) + '</p>' + typeLine + repeatLine + detail + action + '</div>';
   }
@@ -903,14 +931,29 @@
       results;
   }
 
-  // Every upcoming meal per companionship (the leaders' layout). cardOpts picks the card mode.
+  // Every upcoming meal per companionship (the leaders' layout). cardOpts picks the card mode;
+  // the companionship is named once in the heading, not on each card.
   function upcomingByComp(data, cardOpts) {
+    cardOpts = Object.assign({ grouped: true }, cardOpts);
     return COMPS.map(function (c) {
       var items = upcoming(data.signups.filter(function (s) { return s.comp === c; }));
       return '<h2>' + esc(namesOf(c)) + '</h2>' +
         (items.length ? items.map(function (s) { return signupCard(s, data.signups, cardOpts); }).join('')
                       : '<div class="empty">Todavía no hay comidas próximas.</div>');
     }).join('');
+  }
+
+  // The same list with an "Exportar a PDF" button. Printing shows only the .print-area section,
+  // with a heading and the date it was made.
+  function exportableList(data, cardOpts) {
+    var made = cap(new Date().toLocaleDateString(CONFIG.locale, { year: 'numeric', month: 'long', day: 'numeric' }));
+    return '<button class="btn secondary" data-action="exportPdf">Exportar a PDF</button>' +
+      '<p class="hint">Se abrirá la ventana de impresión. Elija «Guardar como PDF».</p>' +
+      '<section class="print-area">' +
+        '<div class="print-only"><h1>Comidas con los misioneros</h1>' +
+        '<p>Barrio Horizon West &middot; Todas las próximas comidas &middot; ' + esc(made) + '</p></div>' +
+        upcomingByComp(data, cardOpts) +
+      '</section>';
   }
 
   function viewMissionary() {
@@ -942,7 +985,7 @@
     // status === 'ok': read-only, no Quitar buttons, no names form.
     return head +
       '<p class="lead">Todas las próximas comidas. Esta página se actualiza sola.</p>' +
-      upcomingByComp(M.data, { readOnly: true }) +
+      exportableList(M.data, { readOnly: true }) +
       '<button class="btn secondary" data-action="missionaryExit">Salir</button>' +
       '<p class="hint">Al salir, este dispositivo olvida el PIN.</p>';
   }
@@ -986,7 +1029,7 @@
         '<input id="n-' + c + '" name="' + c + '" type="text" maxlength="120" value="' + esc(v) + '">';
     }).join('');
 
-    var list = upcomingByComp(data, { leader: true });
+    var list = exportableList(data, { leader: true });
 
     // The missionaries' PIN (leader only). Shown in clear: the leader shares it.
     var pin = L.pin || '';
@@ -1149,6 +1192,8 @@
       loadMissionary(getPin(), false).then(function () {
         if (state.view === 'missionary') { render(true); }
       });
+    } else if (a === 'exportPdf') {
+      window.print();
     } else if (a === 'missionaryExit') {
       // Forget the PIN in this tab and drop the list from memory.
       clearPin();
